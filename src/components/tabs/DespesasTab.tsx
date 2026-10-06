@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Search, Download, ChevronDown, ChevronUp, Layers, ArrowUpDown } from 'lucide-react';
 import { SectionHeader } from '../SectionHeader';
-import { br, pctFmt } from '../../utils/formatters';
-import { categorizarDespesa, CORES_CAT } from '../../utils/dataLoader';
+import { CardKpi } from '../CardKpi';
+import { br, pctFmt, numFmt } from '../../utils/formatters';
+import { categorizarDespesa, CORES_CAT, exportToExcel } from '../../utils/dataLoader';
 import type { DespesaRow } from '../../types';
 
 interface DespesasTabProps {
@@ -10,259 +11,230 @@ interface DespesasTabProps {
 }
 
 export const DespesasTab: React.FC<DespesasTabProps> = ({ df_df }) => {
-  const [expandedCat, setExpandedCat] = useState<Record<string, boolean>>({
-    FINANCEIROS: true,
-    OPERACIONAL: true,
-  });
+  const [busca, setBusca] = useState('');
+  const [categoriaAtiva, setCategoriaAtiva] = useState<string>('TODAS');
+  const [expandedCat, setExpandedCat] = useState<Record<string, boolean>>({});
 
-  if (df_df.length === 0) {
-    return (
-      <div className="py-12 text-center text-[#8B8FA8] text-sm">
-        Dados de despesas não disponíveis para o período selecionado.
-      </div>
-    );
-  }
+  const df = useMemo(() => {
+    return df_df.map(d => ({
+      ...d,
+      Categoria: categorizarDespesa(d.Item),
+    }));
+  }, [df_df]);
 
-  const df = df_df.map(d => ({
-    ...d,
-    Categoria: categorizarDespesa(d.Item),
-  }));
-
-  const totalGeral = df.reduce((acc, d) => acc + (d.Valor || 0), 0);
-  const itensUnicos = new Set(df.map(d => d.Item)).size;
+  const totalGeral = useMemo(() => {
+    return df.reduce((acc, d) => acc + (d.Valor || 0), 0);
+  }, [df]);
 
   // Group by category
-  const catMap = new Map<string, number>();
-  df.forEach(d => {
-    catMap.set(d.Categoria, (catMap.get(d.Categoria) || 0) + (d.Valor || 0));
-  });
+  const categoriasAgg = useMemo(() => {
+    const map = new Map<string, { total: number; count: number }>();
+    df.forEach(d => {
+      const curr = map.get(d.Categoria) || { total: 0, count: 0 };
+      curr.total += d.Valor || 0;
+      curr.count += 1;
+      map.set(d.Categoria, curr);
+    });
 
-  const dfCat = Array.from(catMap.entries())
-    .map(([categoria, valor]) => ({ categoria, valor }))
-    .sort((a, b) => b.valor - a.valor);
+    return Array.from(map.entries())
+      .map(([cat, data]) => ({
+        categoria: cat,
+        total: data.total,
+        count: data.count,
+        pct: totalGeral > 0 ? (data.total / totalGeral) * 100 : 0,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [df, totalGeral]);
 
-  const maiorCat = dfCat[0] || null;
+  // Filtered expenses
+  const despesasFiltradas = useMemo(() => {
+    return df.filter(d => {
+      if (categoriaAtiva !== 'TODAS' && d.Categoria !== categoriaAtiva) return false;
+      if (busca.trim()) {
+        const b = busca.toLowerCase().trim();
+        const item = (d.Item || '').toLowerCase();
+        const emp = (d.Empresa || '').toLowerCase();
+        if (!item.includes(b) && !emp.includes(b)) return false;
+      }
+      return true;
+    }).sort((a, b) => b.Valor - a.Valor);
+  }, [df, categoriaAtiva, busca]);
 
-  // Top 10 items
-  const itemMap = new Map<string, number>();
-  df.forEach(d => {
-    itemMap.set(d.Item, (itemMap.get(d.Item) || 0) + (d.Valor || 0));
-  });
-  const top10Itens = Array.from(itemMap.entries())
-    .map(([item, valor]) => ({ item, valor, categoria: categorizarDespesa(item) }))
-    .sort((a, b) => b.valor - a.valor)
-    .slice(0, 10);
-  const maxItemVal = top10Itens[0]?.valor || 1;
+  const maiorCat = categoriasAgg[0] || null;
 
   const toggleExpand = (cat: string) => {
     setExpandedCat(prev => ({ ...prev, [cat]: !prev[cat] }));
   };
 
+  const handleExport = () => {
+    exportToExcel(
+      despesasFiltradas.map(d => ({
+        Empresa: d.Empresa,
+        Mês: d.Mês_Filtro,
+        Item: d.Item,
+        Categoria: d.Categoria,
+        'Tipo Despesa': d.Categoria_Desp,
+        'Valor (R$)': d.Valor,
+      })),
+      'Despesas_Administrativas_Bela_Cereais',
+      'Despesas'
+    );
+  };
+
   return (
     <div className="space-y-6">
       <SectionHeader
-        titulo="Análise de Despesas Administrativas"
-        subtitulo="Plano de contas detalhado com categorização automática e segregação de centros de custo"
+        titulo="Centro de Custos & Despesas (BD_DESP / BD_DESP_COMPL)"
+        subtitulo="Auditoria do plano de contas, segregação de despesas administrativas e financeiras"
       />
 
-      {/* Top 3 Cards */}
+      {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="bg-[#16181F] border border-[#2A2D38] border-l-4 border-l-[#E74C3C] rounded-xl p-5">
-          <div className="text-[11px] text-[#8B8FA8] uppercase font-semibold tracking-wider">
-            Total Despesas
-          </div>
-          <div className="text-2xl font-bold font-mono text-[#E74C3C] mt-1 truncate">
-            {br(totalGeral)}
-          </div>
-        </div>
-
-        <div className="bg-[#16181F] border border-[#2A2D38] border-l-4 border-l-[#F59E0B] rounded-xl p-5">
-          <div className="text-[11px] text-[#8B8FA8] uppercase font-semibold tracking-wider">
-            Itens de Custo
-          </div>
-          <div className="text-2xl font-bold font-mono text-[#F59E0B] mt-1">
-            {itensUnicos}
-          </div>
-        </div>
-
-        <div className="bg-[#16181F] border border-[#2A2D38] border-l-4 border-l-[#8B5CF6] rounded-xl p-5">
-          <div className="text-[11px] text-[#8B8FA8] uppercase font-semibold tracking-wider">
-            Maior Categoria
-          </div>
-          <div className="text-lg font-bold text-[#8B5CF6] mt-1 truncate">
-            {maiorCat?.categoria || '-'}
-          </div>
-          <div className="text-xs text-[#8B8FA8] mt-0.5 font-mono">
-            {br(maiorCat?.valor || 0)} ({pctFmt(totalGeral ? ((maiorCat?.valor || 0) / totalGeral) * 100 : 0)})
-          </div>
-        </div>
-      </div>
-
-      {/* 2 Gráficos */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Despesas por Categoria */}
-        <div className="bg-[#16181F] border border-[#2A2D38] rounded-2xl p-6">
-          <SectionHeader
-            titulo="Despesas por Categoria"
-            subtitulo="Distribuição percentual dos gastos por centro"
-          />
-
-          <div className="space-y-3 pt-2">
-            {dfCat.map(cat => {
-              const cor = CORES_CAT[cat.categoria] || '#6B7080';
-              const pct = totalGeral ? (cat.valor / totalGeral) * 100 : 0;
-              return (
-                <div key={cat.categoria} className="space-y-1">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-white flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cor }} />
-                      {cat.categoria}
-                    </span>
-                    <span className="font-mono text-white font-medium">
-                      {br(cat.valor)} <span className="text-[#8B8FA8]">({pctFmt(pct)})</span>
-                    </span>
-                  </div>
-                  <div className="w-full bg-[#1E2029] rounded-full h-2 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{ width: `${pct}%`, backgroundColor: cor }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Top 10 Itens de Custo */}
-        <div className="bg-[#16181F] border border-[#2A2D38] rounded-2xl p-6">
-          <SectionHeader
-            titulo="Top 10 Itens de Custo"
-            subtitulo="Principais rubricas financeiras e operacionais"
-          />
-
-          <div className="space-y-2.5 pt-2">
-            {top10Itens.map((it, idx) => {
-              const cor = CORES_CAT[it.categoria] || '#6B7080';
-              const pct = (it.valor / maxItemVal) * 100;
-              return (
-                <div key={idx} className="space-y-1">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-white truncate max-w-[220px]" title={it.item}>
-                      {it.item}
-                    </span>
-                    <span className="font-mono text-[#E74C3C] font-semibold">{br(it.valor)}</span>
-                  </div>
-                  <div className="w-full bg-[#1E2029] rounded-full h-2 overflow-hidden">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${pct}%`, backgroundColor: cor }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Detalhamento por Categoria (Expansível) */}
-      <div className="space-y-3">
-        <SectionHeader
-          titulo="Detalhamento por Categoria"
-          subtitulo="Clique para abrir e analisar os itens de cada grupo"
+        <CardKpi
+          titulo="Total de Despesas"
+          valor={br(totalGeral)}
+          icone="📉"
+          cor="#EF4444"
+          subtitulo="Período selecionado"
         />
+        <CardKpi
+          titulo="Centros de Custo"
+          valor={numFmt(categoriasAgg.length)}
+          icone="📂"
+          cor="#E58B20"
+          subtitulo={`${numFmt(df.length)} lançamentos`}
+        />
+        <CardKpi
+          titulo="Maior Grupo de Custo"
+          valor={maiorCat ? maiorCat.categoria : '-'}
+          icone="🎯"
+          cor="#8B5CF6"
+          subtitulo={maiorCat ? `${br(maiorCat.total)} (${pctFmt(maiorCat.pct)})` : ''}
+        />
+      </div>
 
-        {dfCat.map(cat => {
-          const isExp = !!expandedCat[cat.categoria];
-          const cor = CORES_CAT[cat.categoria] || '#6B7080';
-          const pct = totalGeral ? (cat.valor / totalGeral) * 100 : 0;
+      {/* Distribution by Category */}
+      <div className="bg-[#12141C] border border-white/[0.07] rounded-xl p-4 sm:p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-[#E58B20]" />
+            <h4 className="text-sm font-bold text-white font-heading m-0">
+              Distribuição por Categoria
+            </h4>
+          </div>
+          <span className="text-xs text-[#8E93A6]">
+            Total: <span className="font-mono text-white font-bold">{br(totalGeral)}</span>
+          </span>
+        </div>
 
-          // Items inside this category
-          const itemsSubMap = new Map<string, number>();
-          df.filter(d => d.Categoria === cat.categoria).forEach(d => {
-            itemsSubMap.set(d.Item, (itemsSubMap.get(d.Item) || 0) + (d.Valor || 0));
-          });
-          const itemsSub = Array.from(itemsSubMap.entries())
-            .map(([item, valor]) => ({ item, valor }))
-            .sort((a, b) => b.valor - a.valor);
-
-          return (
-            <div
-              key={cat.categoria}
-              className="bg-[#16181F] border border-[#2A2D38] rounded-xl overflow-hidden transition-all"
-            >
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+          {categoriasAgg.map(cat => {
+            const cor = CORES_CAT[cat.categoria] || '#6B7280';
+            const active = categoriaAtiva === cat.categoria;
+            return (
               <button
-                onClick={() => toggleExpand(cat.categoria)}
-                className="w-full flex items-center justify-between p-4 bg-[#1E2029]/60 hover:bg-[#1E2029] text-left transition-colors"
+                key={cat.categoria}
+                onClick={() => setCategoriaAtiva(active ? 'TODAS' : cat.categoria)}
+                className={`p-3 rounded-xl border text-left transition-all ${
+                  active
+                    ? 'bg-[#161822] border-[#E58B20] shadow-md ring-1 ring-[#E58B20]'
+                    : 'bg-[#161822] border-white/[0.06] hover:border-white/[0.14]'
+                }`}
               >
-                <div className="flex items-center gap-3">
-                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cor }} />
-                  <span className="font-bold text-white text-sm">{cat.categoria}</span>
-                  <span className="text-xs text-[#8B8FA8] font-mono">
-                    {br(cat.valor)} ({pctFmt(pct)})
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cor }} />
+                  <span className="text-[11px] font-semibold text-white truncate" title={cat.categoria}>
+                    {cat.categoria}
                   </span>
                 </div>
-                <div className="text-[#8B8FA8]">
-                  {isExp ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                <div className="text-sm font-bold font-mono text-white truncate">
+                  {br(cat.total)}
+                </div>
+                <div className="text-[10px] text-[#8E93A6] mt-0.5">
+                  {pctFmt(cat.pct)} do total
                 </div>
               </button>
+            );
+          })}
+        </div>
+      </div>
 
-              {isExp && (
-                <div className="p-4 border-t border-[#2A2D38] overflow-x-auto">
-                  <table className="w-full text-left text-xs text-[#C8CAD4]">
-                    <thead className="bg-[#1E2029] text-[10px] uppercase font-semibold text-[#8B8FA8]">
-                      <tr>
-                        <th className="py-2 px-3">📌 Item</th>
-                        <th className="py-2 px-3 text-right">💸 Valor</th>
-                        <th className="py-2 px-3 min-w-[120px]">📊 % do Total</th>
-                        <th className="py-2 px-3 min-w-[120px]">📈 % da Categoria</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#2A2D38]">
-                      {itemsSub.map((item, i) => {
-                        const pctTot = totalGeral ? (item.valor / totalGeral) * 100 : 0;
-                        const pctSub = cat.valor ? (item.valor / cat.valor) * 100 : 0;
-                        return (
-                          <tr key={i} className="hover:bg-[#1E2029]/40">
-                            <td className="py-2 px-3 font-medium text-white">{item.item}</td>
-                            <td className="py-2 px-3 text-right font-mono text-[#E74C3C]">{br(item.valor)}</td>
-                            <td className="py-2 px-3">
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 bg-[#2A2D38] rounded-full h-1.5 overflow-hidden">
-                                  <div
-                                    className="bg-[#F29124] h-full rounded-full"
-                                    style={{ width: `${Math.min(100, pctTot * 3)}%` }}
-                                  />
-                                </div>
-                                <span className="font-mono text-[11px] text-[#8B8FA8] min-w-[35px] text-right">
-                                  {pctFmt(pctTot)}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-2 px-3">
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 bg-[#2A2D38] rounded-full h-1.5 overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full"
-                                    style={{ width: `${Math.min(100, pctSub)}%`, backgroundColor: cor }}
-                                  />
-                                </div>
-                                <span className="font-mono text-[11px] text-[#8B8FA8] min-w-[35px] text-right">
-                                  {pctFmt(pctSub)}
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+      {/* Filter and Table */}
+      <div className="bg-[#12141C] border border-white/[0.07] rounded-xl p-4 sm:p-5 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-1 max-w-sm">
+            <div className="relative w-full">
+              <input
+                type="text"
+                placeholder="Buscar item de despesa, plano de contas..."
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                className="w-full bg-[#090A0F] border border-white/[0.08] focus:border-[#E58B20] rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-[#686D82] focus:outline-none"
+              />
+              <Search className="w-3.5 h-3.5 text-[#8E93A6] absolute left-2.5 top-2.5" />
             </div>
-          );
-        })}
+            {categoriaAtiva !== 'TODAS' && (
+              <button
+                onClick={() => setCategoriaAtiva('TODAS')}
+                className="px-2.5 py-1 text-xs bg-white/[0.08] hover:bg-white/[0.12] rounded-lg text-white font-medium whitespace-nowrap"
+              >
+                Ver Todas
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 text-xs text-[#8E93A6]">
+            <span>{despesasFiltradas.length} itens</span>
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#E58B20] text-black font-bold text-xs hover:bg-[#ff9d2e] transition-all shadow-sm"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Exportar</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto rounded-lg border border-white/[0.06]">
+          <table className="w-full text-left text-xs text-[#C8CAD4]">
+            <thead className="bg-[#161822] text-[11px] font-semibold text-[#8E93A6] uppercase tracking-wider border-b border-white/[0.06]">
+              <tr>
+                <th className="py-2.5 px-3">Rubrica / Item</th>
+                <th className="py-2.5 px-3">Categoria</th>
+                <th className="py-2.5 px-3">Empresa</th>
+                <th className="py-2.5 px-3">Mês</th>
+                <th className="py-2.5 px-3 text-right">Valor (R$)</th>
+                <th className="py-2.5 px-3 text-right">% do Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/[0.04]">
+              {despesasFiltradas.slice(0, 50).map((d, i) => {
+                const cor = CORES_CAT[d.Categoria] || '#6B7280';
+                const pct = totalGeral > 0 ? (d.Valor / totalGeral) * 100 : 0;
+                return (
+                  <tr key={i} className="hover:bg-white/[0.02] transition-colors">
+                    <td className="py-2.5 px-3 font-medium text-white">{d.Item}</td>
+                    <td className="py-2.5 px-3">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#C8CAD4]">
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: cor }} />
+                        {d.Categoria}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-[#8E93A6]">{d.Empresa}</td>
+                    <td className="py-2.5 px-3 font-mono text-[#8E93A6]">{d.Mês_Filtro}</td>
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-[#EF4444]">
+                      {br(d.Valor)}
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono text-[#8E93A6]">
+                      {pctFmt(pct)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

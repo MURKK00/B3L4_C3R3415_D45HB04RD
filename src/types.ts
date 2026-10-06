@@ -15,6 +15,7 @@ export interface LucroRow {
   Comissão: number;
   Outros: number;
   'Lucro Líq.': number;
+  'Lucro Sc/Tn': number;
   'Peso Kg': number;
   'Sacas/Ton': number;
   Contrato_Aberto: boolean;
@@ -39,6 +40,12 @@ export interface RecFinRow {
   Mês_Filtro: string;
   Item: string;
   Valor: number;
+  Descricao?: string;
+  NomeClienteOk?: string;
+  NDocumento?: string;
+  DescricaoPlanoContas?: string;
+  Parcela?: string;
+  DescricaoFormaPagto?: string;
 }
 
 export interface FaturamentoRow {
@@ -47,6 +54,16 @@ export interface FaturamentoRow {
   MesNum: number;
   Mês_Filtro: string;
   Faturamento: number;
+  'Valor Venda': number;
+  'Valor Compra': number;
+  Frete: number;
+  Impostos: number;
+  'Outros Gastos': number;
+  'Lucro Contrato': number;
+  Peso: number;
+  'Num Carregamento'?: string | number;
+  Placa?: string;
+  'Nota Fiscal'?: string | number;
 }
 
 export interface Dataset {
@@ -64,6 +81,7 @@ export interface Kpis {
   comissao: number;
   outros: number;
   faturamento_total: number;
+  cmv: number;
   custo_operacional: number;
   lucro_operacional: number;
   despesas_admin: number;
@@ -72,6 +90,8 @@ export interface Kpis {
   desp_financeira: number;
   resultado_financeiro: number;
   receita_financeira: number;
+  apropriacao_icms?: number;
+  receitas_investimento?: number;
   lucro_liquido_final: number;
   margem_bruta: number;
   margem_op: number;
@@ -94,4 +114,5 @@ export interface Filtros {
   produtos: string[];
   todosMeses: boolean;
   meses: string[];
+  termoBusca?: string;
 }

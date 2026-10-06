@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Download, ArrowUpDown, Filter, Eye } from 'lucide-react';
 import { SectionHeader } from '../SectionHeader';
-import { br, numFmt } from '../../utils/formatters';
+import { ContractDrawer } from '../ContractDrawer';
+import { br, numFmt, pctFmt } from '../../utils/formatters';
+import { exportToExcel } from '../../utils/dataLoader';
 import type { LucroRow } from '../../types';
 
 interface ContratosTabProps {
@@ -13,7 +15,12 @@ export const ContratosTab: React.FC<ContratosTabProps> = ({ df_lf }) => {
   const [selCli, setSelCli] = useState<string>('Todos');
   const [termoBusca, setTermoBusca] = useState<string>('');
   const [pagina, setPagina] = useState<number>(1);
-  const itensPorPagina = 15;
+  const [contratoSelecionado, setContratoSelecionado] = useState<LucroRow | null>(null);
+  const [ordenacao, setOrdenacao] = useState<{ campo: keyof LucroRow; dir: 'asc' | 'desc' }>({
+    campo: 'Lucro Líq.',
+    dir: 'desc',
+  });
+  const itensPorPagina = 20;
 
   const produtos = useMemo(() => {
     const set = new Set<string>();
@@ -46,227 +53,263 @@ export const ContratosTab: React.FC<ContratosTabProps> = ({ df_lf }) => {
     });
   }, [df_lf, selProd, selCli, termoBusca]);
 
-  // Ranking de fornecedores
-  const rankingFornecedores = useMemo(() => {
-    const fornMap = new Map<string, {
-      fornecedor: string;
-      lucroBruto: number;
-      lucroLiq: number;
-      peso: number;
-    }>();
-
-    contratosFiltrados.forEach(row => {
-      const f = row.Fornecedor || 'Não Informado';
-      const curr = fornMap.get(f) || {
-        fornecedor: f,
-        lucroBruto: 0,
-        lucroLiq: 0,
-        peso: 0,
-      };
-      curr.lucroBruto += row['Lucro Bruto'] || 0;
-      curr.lucroLiq += row['Lucro Líq.'] || 0;
-      curr.peso += row['Peso Kg'] || 0;
-      fornMap.set(f, curr);
+  // Sort
+  const contratosOrdenados = useMemo(() => {
+    return [...contratosFiltrados].sort((a, b) => {
+      const vA = (a[ordenacao.campo] as any) ?? 0;
+      const vB = (b[ordenacao.campo] as any) ?? 0;
+      if (typeof vA === 'number' && typeof vB === 'number') {
+        return ordenacao.dir === 'asc' ? vA - vB : vB - vA;
+      }
+      return ordenacao.dir === 'asc'
+        ? String(vA).localeCompare(String(vB))
+        : String(vB).localeCompare(String(vA));
     });
-
-    return Array.from(fornMap.values())
-      .sort((a, b) => b.lucroLiq - a.lucroLiq)
-      .map((item, idx) => ({ ...item, posicao: idx + 1 }));
-  }, [contratosFiltrados]);
+  }, [contratosFiltrados, ordenacao]);
 
   // Pagination
-  const totalPaginas = Math.ceil(contratosFiltrados.length / itensPorPagina) || 1;
+  const totalPaginas = Math.ceil(contratosOrdenados.length / itensPorPagina) || 1;
   const contratosPaginados = useMemo(() => {
     const start = (pagina - 1) * itensPorPagina;
-    return contratosFiltrados.slice(start, start + itensPorPagina);
-  }, [contratosFiltrados, pagina]);
+    return contratosOrdenados.slice(start, start + itensPorPagina);
+  }, [contratosOrdenados, pagina]);
+
+  const toggleSort = (campo: keyof LucroRow) => {
+    setOrdenacao(prev => ({
+      campo,
+      dir: prev.campo === campo && prev.dir === 'desc' ? 'asc' : 'desc',
+    }));
+  };
+
+  const handleExport = () => {
+    exportToExcel(
+      contratosOrdenados.map(r => ({
+        'Contrato V': r['Contrato V'],
+        'Contrato C': r['Contrato C'],
+        Fornecedor: r.Fornecedor,
+        Cliente: r.Cliente,
+        Produto: r.Produto,
+        Empresa: r.Empresa,
+        Mês: r.Mês_Filtro,
+        'Peso (Kg)': r['Peso Kg'],
+        'Sacas/Ton': r['Sacas/Ton'],
+        'Lucro Bruto (R$)': r['Lucro Bruto'],
+        'Frete (R$)': r['Total Frete'],
+        'Impostos (R$)': r.Impostos,
+        'Comissão (R$)': r.Comissão,
+        'Lucro Líquido (R$)': r['Lucro Líq.'],
+        'Lucro Sc/Tn (R$)': r['Lucro Sc/Tn'],
+      })),
+      'Contratos_Bela_Cereais',
+      'Contratos'
+    );
+  };
 
   return (
     <div className="space-y-6">
-      <SectionHeader
-        titulo="Detalhamento de Contratos"
-        subtitulo="Todos os contratos de compra e venda do período selecionado"
+      {/* Drawer */}
+      <ContractDrawer
+        contrato={contratoSelecionado}
+        onClose={() => setContratoSelecionado(null)}
       />
 
-      {/* Filtros rápidos e busca */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-[#16181F] p-4 rounded-xl border border-[#2A2D38]">
-        <div>
-          <label className="block text-xs font-semibold text-[#8B8FA8] mb-1">
-            🌱 Filtrar por Produto
-          </label>
-          <select
-            value={selProd}
-            onChange={(e) => { setSelProd(e.target.value); setPagina(1); }}
-            className="w-full bg-[#1E2029] border border-[#2A2D38] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F29124]"
-          >
-            {produtos.map(p => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-        </div>
+      <SectionHeader
+        titulo="Central de Contratos (BD_LUCRO)"
+        subtitulo="Listagem analítica de operações de compra e venda com visualização detalhada"
+      />
 
-        <div>
-          <label className="block text-xs font-semibold text-[#8B8FA8] mb-1">
-            👤 Filtrar por Cliente
-          </label>
-          <select
-            value={selCli}
-            onChange={(e) => { setSelCli(e.target.value); setPagina(1); }}
-            className="w-full bg-[#1E2029] border border-[#2A2D38] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F29124]"
-          >
-            {clientes.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </div>
+      {/* Control bar */}
+      <div className="bg-[#12141C] border border-white/[0.07] rounded-xl p-3 sm:p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Filters */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center gap-1.5 bg-[#090A0F] border border-white/[0.08] px-2.5 py-1 rounded-lg text-xs">
+              <span className="text-[#8E93A6]">Commodity:</span>
+              <select
+                value={selProd}
+                onChange={(e) => { setSelProd(e.target.value); setPagina(1); }}
+                className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer"
+              >
+                {produtos.map(p => (
+                  <option key={p} value={p} className="bg-[#161822]">{p}</option>
+                ))}
+              </select>
+            </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-[#8B8FA8] mb-1">
-            🔍 Buscar Contrato / Parceiro
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Ex: 0194, Soja, Bunge..."
-              value={termoBusca}
-              onChange={(e) => { setTermoBusca(e.target.value); setPagina(1); }}
-              className="w-full bg-[#1E2029] border border-[#2A2D38] rounded-lg pl-8 pr-3 py-2 text-xs text-white focus:outline-none focus:border-[#F29124]"
-            />
-            <Search className="w-3.5 h-3.5 text-[#8B8FA8] absolute left-2.5 top-2.5" />
+            <div className="flex items-center gap-1.5 bg-[#090A0F] border border-white/[0.08] px-2.5 py-1 rounded-lg text-xs">
+              <span className="text-[#8E93A6]">Cliente:</span>
+              <select
+                value={selCli}
+                onChange={(e) => { setSelCli(e.target.value); setPagina(1); }}
+                className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer max-w-[140px]"
+              >
+                {clientes.map(c => (
+                  <option key={c} value={c} className="bg-[#161822]">{c}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Search & Export */}
+          <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
+            <div className="relative w-full sm:w-60">
+              <input
+                type="text"
+                placeholder="Buscar contrato, parceiro..."
+                value={termoBusca}
+                onChange={(e) => { setTermoBusca(e.target.value); setPagina(1); }}
+                className="w-full bg-[#090A0F] border border-white/[0.08] focus:border-[#E58B20] rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-[#686D82] focus:outline-none"
+              />
+              <Search className="w-3.5 h-3.5 text-[#8E93A6] absolute left-2.5 top-2.5" />
+            </div>
+
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#E58B20] text-black font-bold text-xs hover:bg-[#ff9d2e] transition-all shadow-sm flex-shrink-0"
+              title="Exportar contratos filtrados para Excel"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Exportar</span>
+            </button>
           </div>
         </div>
+
+        <div className="flex items-center justify-between text-xs text-[#8E93A6] pt-1">
+          <span>{contratosFiltrados.length} contratos encontrados (clique em qualquer linha para inspecionar)</span>
+          <span>Página {pagina} de {totalPaginas}</span>
+        </div>
       </div>
 
-      <div className="text-xs text-[#8B8FA8] font-medium flex justify-between items-center">
-        <span>{contratosFiltrados.length} contratos exibidos</span>
-        <span>Página {pagina} de {totalPaginas}</span>
-      </div>
-
-      {/* Tabela de Contratos */}
-      <div className="overflow-x-auto rounded-xl border border-[#2A2D38] bg-[#16181F]">
+      {/* Main Table */}
+      <div className="overflow-x-auto rounded-xl border border-white/[0.07] bg-[#12141C]">
         <table className="w-full text-left text-xs text-[#C8CAD4]">
-          <thead className="bg-[#1E2029] text-[11px] font-semibold text-[#8B8FA8] uppercase tracking-wider border-b border-[#2A2D38]">
+          <thead className="bg-[#161822] text-[11px] font-semibold text-[#8E93A6] uppercase tracking-wider border-b border-white/[0.06]">
             <tr>
-              <th className="py-3 px-3 whitespace-nowrap">📄 Contrato V</th>
-              <th className="py-3 px-3 whitespace-nowrap">📋 Contrato C</th>
-              <th className="py-3 px-3">🏭 Fornecedor</th>
-              <th className="py-3 px-3">👤 Cliente</th>
-              <th className="py-3 px-3 whitespace-nowrap">🌱 Produto</th>
-              <th className="py-3 px-3 whitespace-nowrap">🏢 Empresa</th>
-              <th className="py-3 px-3 whitespace-nowrap">📅 Mês</th>
-              <th className="py-3 px-3 text-right whitespace-nowrap">⚖️ Peso Kg</th>
-              <th className="py-3 px-3 text-right whitespace-nowrap">📦 Sacas/Ton</th>
-              <th className="py-3 px-3 text-right whitespace-nowrap">💰 L. Bruto</th>
-              <th className="py-3 px-3 text-right whitespace-nowrap">🚚 Frete</th>
-              <th className="py-3 px-3 text-right whitespace-nowrap">🏛️ Impostos</th>
-              <th className="py-3 px-3 text-right whitespace-nowrap">🤝 Comissão</th>
-              <th className="py-3 px-3 text-right whitespace-nowrap">🎯 L. Líquido</th>
+              <th className="py-3 px-3 cursor-pointer hover:text-white" onClick={() => toggleSort('Contrato V')}>
+                <div className="flex items-center gap-1">
+                  <span>Contrato V</span>
+                  <ArrowUpDown className="w-3 h-3 opacity-60" />
+                </div>
+              </th>
+              <th className="py-3 px-3">Contrato C</th>
+              <th className="py-3 px-3 cursor-pointer hover:text-white" onClick={() => toggleSort('Fornecedor')}>
+                <div className="flex items-center gap-1">
+                  <span>Fornecedor</span>
+                  <ArrowUpDown className="w-3 h-3 opacity-60" />
+                </div>
+              </th>
+              <th className="py-3 px-3 cursor-pointer hover:text-white" onClick={() => toggleSort('Cliente')}>
+                <div className="flex items-center gap-1">
+                  <span>Cliente</span>
+                  <ArrowUpDown className="w-3 h-3 opacity-60" />
+                </div>
+              </th>
+              <th className="py-3 px-3">Produto</th>
+              <th className="py-3 px-3">Mês</th>
+              <th className="py-3 px-3 text-right cursor-pointer hover:text-white" onClick={() => toggleSort('Sacas/Ton')}>
+                <div className="flex items-center justify-end gap-1">
+                  <span>Sacas</span>
+                  <ArrowUpDown className="w-3 h-3 opacity-60" />
+                </div>
+              </th>
+              <th className="py-3 px-3 text-right cursor-pointer hover:text-white" onClick={() => toggleSort('Lucro Bruto')}>
+                <div className="flex items-center justify-end gap-1">
+                  <span>L. Bruto</span>
+                  <ArrowUpDown className="w-3 h-3 opacity-60" />
+                </div>
+              </th>
+              <th className="py-3 px-3 text-right cursor-pointer hover:text-white" onClick={() => toggleSort('Lucro Líq.')}>
+                <div className="flex items-center justify-end gap-1">
+                  <span>L. Líquido</span>
+                  <ArrowUpDown className="w-3 h-3 opacity-60" />
+                </div>
+              </th>
+              <th className="py-3 px-3 text-right cursor-pointer hover:text-white" onClick={() => toggleSort('Lucro Sc/Tn')}>
+                <div className="flex items-center justify-end gap-1">
+                  <span>R$/Sc</span>
+                  <ArrowUpDown className="w-3 h-3 opacity-60" />
+                </div>
+              </th>
+              <th className="py-3 px-2 text-center w-10"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#2A2D38]">
+          <tbody className="divide-y divide-white/[0.04]">
             {contratosPaginados.length === 0 ? (
               <tr>
-                <td colSpan={14} className="py-8 text-center text-[#8B8FA8]">
-                  Nenhum contrato encontrado para os filtros selecionados.
+                <td colSpan={11} className="py-8 text-center text-[#8E93A6]">
+                  Nenhum contrato encontrado.
                 </td>
               </tr>
             ) : (
-              contratosPaginados.map((row, idx) => (
-                <tr key={idx} className="hover:bg-[#1E2029]/50 transition-colors">
-                  <td className="py-2.5 px-3 font-mono font-semibold text-white whitespace-nowrap">
-                    {row['Contrato V'] || '-'}
-                  </td>
-                  <td className="py-2.5 px-3 font-mono text-[#8B8FA8] whitespace-nowrap">
-                    {row['Contrato C'] || '-'}
-                  </td>
-                  <td className="py-2.5 px-3 text-white max-w-[150px] truncate" title={row.Fornecedor}>
-                    {row.Fornecedor || '-'}
-                  </td>
-                  <td className="py-2.5 px-3 text-white max-w-[150px] truncate" title={row.Cliente}>
-                    {row.Cliente || '-'}
-                  </td>
-                  <td className="py-2.5 px-3 text-[#F29124] whitespace-nowrap">{row.Produto}</td>
-                  <td className="py-2.5 px-3 text-[#8B8FA8] whitespace-nowrap">{row.Empresa}</td>
-                  <td className="py-2.5 px-3 font-mono text-[#8B8FA8] whitespace-nowrap">{row.Mês_Filtro}</td>
-                  <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">{numFmt(row['Peso Kg'])}</td>
-                  <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">{numFmt(row['Sacas/Ton'])}</td>
-                  <td className="py-2.5 px-3 text-right font-mono text-[#F29124] whitespace-nowrap">{br(row['Lucro Bruto'])}</td>
-                  <td className="py-2.5 px-3 text-right font-mono text-[#E74C3C] whitespace-nowrap">{br(row['Total Frete'])}</td>
-                  <td className="py-2.5 px-3 text-right font-mono text-[#E74C3C] whitespace-nowrap">{br(row['Impostos'])}</td>
-                  <td className="py-2.5 px-3 text-right font-mono text-[#E74C3C] whitespace-nowrap">{br(row['Comissão'])}</td>
-                  <td
-                    className="py-2.5 px-3 text-right font-mono font-bold whitespace-nowrap"
-                    style={{ color: row['Lucro Líq.'] >= 0 ? '#2ECC71' : '#E74C3C' }}
+              contratosPaginados.map((row, idx) => {
+                const pos = row['Lucro Líq.'] >= 0;
+                return (
+                  <tr
+                    key={idx}
+                    onClick={() => setContratoSelecionado(row)}
+                    className="hover:bg-white/[0.03] cursor-pointer transition-colors group"
                   >
-                    {br(row['Lucro Líq.'])}
-                  </td>
-                </tr>
-              ))
+                    <td className="py-2.5 px-3 font-mono font-bold text-white whitespace-nowrap">
+                      {row['Contrato V'] || '-'}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-[#8E93A6] whitespace-nowrap">
+                      {row['Contrato C'] || '-'}
+                    </td>
+                    <td className="py-2.5 px-3 text-[#C8CAD4] max-w-[160px] truncate" title={row.Fornecedor}>
+                      {row.Fornecedor || '-'}
+                    </td>
+                    <td className="py-2.5 px-3 text-white max-w-[160px] truncate" title={row.Cliente}>
+                      {row.Cliente || '-'}
+                    </td>
+                    <td className="py-2.5 px-3 text-[#E58B20] whitespace-nowrap">{row.Produto}</td>
+                    <td className="py-2.5 px-3 font-mono text-[#8E93A6] whitespace-nowrap">{row.Mês_Filtro}</td>
+                    <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">{numFmt(row['Sacas/Ton'])}</td>
+                    <td className="py-2.5 px-3 text-right font-mono text-[#E58B20] whitespace-nowrap">{br(row['Lucro Bruto'])}</td>
+                    <td
+                      className="py-2.5 px-3 text-right font-mono font-bold whitespace-nowrap"
+                      style={{ color: pos ? '#10B981' : '#EF4444' }}
+                    >
+                      {br(row['Lucro Líq.'])}
+                    </td>
+                    <td
+                      className="py-2.5 px-3 text-right font-mono font-semibold whitespace-nowrap"
+                      style={{ color: (row['Lucro Sc/Tn'] || 0) >= 0 ? '#10B981' : '#EF4444' }}
+                    >
+                      {br(row['Lucro Sc/Tn'])}
+                    </td>
+                    <td className="py-2.5 px-2 text-center text-[#8E93A6] group-hover:text-white">
+                      <Eye className="w-3.5 h-3.5 mx-auto opacity-40 group-hover:opacity-100" />
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
 
-      {/* Pagination controls */}
+      {/* Pagination */}
       {totalPaginas > 1 && (
         <div className="flex justify-center items-center gap-2 pt-2">
           <button
             onClick={() => setPagina(p => Math.max(1, p - 1))}
             disabled={pagina === 1}
-            className="p-1.5 rounded-lg bg-[#16181F] border border-[#2A2D38] text-[#8B8FA8] hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+            className="p-1.5 rounded-lg bg-[#12141C] border border-white/[0.08] text-[#8E93A6] hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="text-xs text-[#8B8FA8] px-2 font-mono">
+          <span className="text-xs text-[#8E93A6] px-2 font-mono">
             {pagina} / {totalPaginas}
           </span>
           <button
             onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
             disabled={pagina === totalPaginas}
-            className="p-1.5 rounded-lg bg-[#16181F] border border-[#2A2D38] text-[#8B8FA8] hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+            className="p-1.5 rounded-lg bg-[#12141C] border border-white/[0.08] text-[#8E93A6] hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
       )}
-
-      {/* Ranking por Fornecedor */}
-      <div className="pt-4">
-        <SectionHeader
-          titulo="Resumo por Fornecedor (Ranking)"
-          subtitulo="Ranking dos parceiros agrícolas por lucro líquido gerado"
-        />
-
-        <div className="overflow-x-auto rounded-xl border border-[#2A2D38] bg-[#16181F]">
-          <table className="w-full text-left text-xs text-[#C8CAD4]">
-            <thead className="bg-[#1E2029] text-[11px] font-semibold text-[#8B8FA8] uppercase tracking-wider border-b border-[#2A2D38]">
-              <tr>
-                <th className="py-3 px-4 w-16">🏆 Rank</th>
-                <th className="py-3 px-4">🏭 Fornecedor</th>
-                <th className="py-3 px-4 text-right">💰 L. Bruto</th>
-                <th className="py-3 px-4 text-right">🎯 L. Líquido</th>
-                <th className="py-3 px-4 text-right">⚖️ Peso Kg</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#2A2D38]">
-              {rankingFornecedores.slice(0, 15).map(f => (
-                <tr key={f.posicao} className="hover:bg-[#1E2029]/50 transition-colors">
-                  <td className="py-2.5 px-4 font-mono font-bold text-[#F29124]">{f.posicao}º</td>
-                  <td className="py-2.5 px-4 font-semibold text-white">{f.fornecedor}</td>
-                  <td className="py-2.5 px-4 text-right font-mono text-[#F29124]">{br(f.lucroBruto)}</td>
-                  <td
-                    className="py-2.5 px-4 text-right font-mono font-bold"
-                    style={{ color: f.lucroLiq >= 0 ? '#2ECC71' : '#E74C3C' }}
-                  >
-                    {br(f.lucroLiq)}
-                  </td>
-                  <td className="py-2.5 px-4 text-right font-mono">{numFmt(f.peso)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 };

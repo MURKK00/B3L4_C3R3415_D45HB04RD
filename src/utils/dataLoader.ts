@@ -31,12 +31,12 @@ export const CATEGORIAS_DESP: Record<string, string[]> = {
 };
 
 export const CORES_CAT: Record<string, string> = {
-  'FINANCEIROS': '#E74C3C',
+  'FINANCEIROS': '#EF4444',
   'IMPOSTOS': '#F59E0B',
   'PESSOAL': '#8B5CF6',
   'LOGÍSTICA': '#3B82F6',
-  'OPERACIONAL': '#2ECC71',
-  'OUTROS': '#6B7080',
+  'OPERACIONAL': '#10B981',
+  'OUTROS': '#6B7280',
 };
 
 export function categorizarDespesa(item: string): string {
@@ -97,27 +97,33 @@ export function calcularKpis(
   const out = sumCol(df_l, 'Outros');
   const sac = sumCol(df_l, 'Sacas/Ton');
   const nc = fechados.length;
-  const fat = sumCol(df_f, 'Faturamento');
+  const fat = sumCol(df_f, 'Valor Venda') || sumCol(df_f, 'Faturamento');
+  const cmv = sumCol(df_f, 'Valor Compra') || (fat > rb ? fat - rb : 0);
 
   const lop = rb - frt - imp - com - out;
   const da = df_d.filter(x => x.Eh_Desp_Admin).reduce((acc, x) => acc + x.Valor, 0);
-  const receitas_extras = Math.abs(imp);
 
   let rec_bruta = 0;
   let desp_fin = df_d.filter(x => x.Categoria_Desp === 'FINANCEIRO').reduce((acc, x) => acc + x.Valor, 0);
+  let rec_invest = 0;
+  let aprop_icms = 0;
 
   if (df_r && df_r.length > 0) {
-    rec_bruta = df_r.filter(x => x.Valor > 0).reduce((acc, x) => acc + x.Valor, 0);
+    rec_invest = df_r.filter(x => x.Item && x.Item.includes('INVESTIMENTO')).reduce((acc, x) => acc + x.Valor, 0);
+    aprop_icms = df_r.filter(x => x.Item && x.Item.includes('ICMS')).reduce((acc, x) => acc + x.Valor, 0);
+    rec_bruta = df_r.filter(x => x.Valor > 0 && !x.Item?.includes('ICMS') && !x.Item?.includes('INVESTIMENTO')).reduce((acc, x) => acc + x.Valor, 0);
     desp_fin += Math.abs(df_r.filter(x => x.Valor < 0).reduce((acc, x) => acc + x.Valor, 0));
   }
 
   const rec_fin_liq = rec_bruta - desp_fin;
-  const llf = lop - da + receitas_extras + rec_fin_liq;
+  // Lucro Líquido Final: Lucro Operacional - Despesas Administrativas + Investimento + Resultado Financeiro Líquido + Apropriação ICMS
+  const llf = lop - da + rec_invest + rec_fin_liq + aprop_icms;
 
+  const baseCalculoMargem = fat > 0 ? fat : (rb > 0 ? rb : 1);
   const margem_bruta = fat > 0 ? (rb / fat * 100) : 0;
-  const margem_op = rb > 0 ? (lop / rb * 100) : 0;
-  const margem_liq = rb > 0 ? (llf / rb * 100) : 0;
-  const indice_desp = rb > 0 ? (da / rb * 100) : 0;
+  const margem_op = (lop / baseCalculoMargem) * 100;
+  const margem_liq = (llf / baseCalculoMargem) * 100;
+  const indice_desp = baseCalculoMargem > 0 ? (da / baseCalculoMargem * 100) : 0;
 
   return {
     receita_bruta: rb,
@@ -126,14 +132,17 @@ export function calcularKpis(
     comissao: com,
     outros: out,
     faturamento_total: fat,
-    custo_operacional: 0,
+    cmv,
+    custo_operacional: cmv,
     lucro_operacional: lop,
     despesas_admin: da,
-    receitas_extras: receitas_extras,
+    receitas_extras: rec_invest,
     rec_financeira: rec_bruta,
     desp_financeira: desp_fin,
     resultado_financeiro: rec_fin_liq,
     receita_financeira: rec_fin_liq,
+    apropriacao_icms: aprop_icms,
+    receitas_investimento: rec_invest,
     lucro_liquido_final: llf,
     margem_bruta,
     margem_op,
@@ -155,6 +164,16 @@ export function filtrarLucro(df: LucroRow[], f: Filtros): LucroRow[] {
     if (!f.todasEmpresas && f.empresas.length > 0 && !f.empresas.includes(row.Empresa)) return false;
     if (!f.todosProdutos && f.produtos.length > 0 && !f.produtos.includes(row.Produto)) return false;
     if (!f.todosMeses && f.meses.length > 0 && !f.meses.includes(row.Mês_Filtro)) return false;
+    if (f.termoBusca && f.termoBusca.trim()) {
+      const t = f.termoBusca.toLowerCase().trim();
+      const match =
+        (row['Contrato V'] || '').toLowerCase().includes(t) ||
+        (row['Contrato C'] || '').toLowerCase().includes(t) ||
+        (row.Cliente || '').toLowerCase().includes(t) ||
+        (row.Fornecedor || '').toLowerCase().includes(t) ||
+        (row.Produto || '').toLowerCase().includes(t);
+      if (!match) return false;
+    }
     return true;
   });
 }
@@ -164,6 +183,11 @@ export function filtrarDespesas(df: DespesaRow[], f: Filtros): DespesaRow[] {
     if (f.anos.length > 0 && !f.anos.includes(row.Ano)) return false;
     if (!f.todasEmpresas && f.empresas.length > 0 && !f.empresas.includes(row.Empresa)) return false;
     if (!f.todosMeses && f.meses.length > 0 && !f.meses.includes(row.Mês_Filtro)) return false;
+    if (f.termoBusca && f.termoBusca.trim()) {
+      const t = f.termoBusca.toLowerCase().trim();
+      const match = (row.Item || '').toLowerCase().includes(t);
+      if (!match) return false;
+    }
     return true;
   });
 }
@@ -182,6 +206,14 @@ export function filtrarFaturamento(df: FaturamentoRow[], f: Filtros): Faturament
     if (f.anos.length > 0 && !f.anos.includes(row.Ano)) return false;
     if (!f.todasEmpresas && f.empresas.length > 0 && !f.empresas.includes(row.Empresa)) return false;
     if (!f.todosMeses && f.meses.length > 0 && !f.meses.includes(row.Mês_Filtro)) return false;
+    if (f.termoBusca && f.termoBusca.trim()) {
+      const t = f.termoBusca.toLowerCase().trim();
+      const match =
+        String(row['Num Carregamento'] || '').toLowerCase().includes(t) ||
+        String(row.Placa || '').toLowerCase().includes(t) ||
+        String(row['Nota Fiscal'] || '').toLowerCase().includes(t);
+      if (!match) return false;
+    }
     return true;
   });
 }
@@ -278,7 +310,6 @@ export function porProdutoAno(df_l: LucroRow[]) {
   });
 }
 
-// Function to parse uploaded Excel in browser
 export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<Dataset> {
   const wb = XLSX.read(buffer, { type: 'array' });
 
@@ -339,7 +370,7 @@ export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<Dataset> {
   const rawR = adjustHeader(getSheetData('BD_REC_FIN', 'REC_FIN'));
   const rawF = adjustHeader(getSheetData('BD_FATURAMENTO', 'FATURAMENTO'));
 
-  const df_lucro: LucroRow[] = rawL.map(r => {
+  const df_lucro: LucroRow[] = (rawL.map(r => {
     const colEmp = findCol(r, ['EMPRESA', 'FILIAL']);
     const colMes = findCol(r, ['MÊS', 'MES', 'DATA']);
     const empresaRaw = colEmp ? String(r[colEmp] || '') : '';
@@ -347,7 +378,7 @@ export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<Dataset> {
 
     let dt = colMes ? parseDateBr(r[colMes]) : null;
     let ano = dt ? dt.getUTCFullYear() : (r['Ano'] ? parseInt(r['Ano'], 10) : 2025);
-    if (![2024, 2025, 2026].includes(ano)) return null;
+    if (ano < 2020 || ano > 2035) return null;
 
     const empresa = MAPA_EMPRESAS[empresaRaw.trim()] || empresaRaw.trim();
     const mesNum = dt ? (dt.getUTCMonth() + 1) : 0;
@@ -368,6 +399,7 @@ export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<Dataset> {
     const ll = num('Lucro Líq.');
     const peso = num('Peso Kg');
     const sacas = num('Sacas/Ton');
+    const lucroScTn = num('Lucro Sc/Tn');
 
     const colsFinSum = Math.abs(lb) + Math.abs(peso) + Math.abs(imp) + Math.abs(frete) + Math.abs(com) + Math.abs(out);
     if (colsFinSum <= 0) return null;
@@ -378,7 +410,7 @@ export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<Dataset> {
     const contVCol = findCol(r, ['Contrato V', 'CONTRATO V']);
     const contCCol = findCol(r, ['Contrato C', 'CONTRATO C']);
 
-    return {
+    const item: LucroRow = {
       Empresa: empresa,
       Ano: ano,
       MesNum: mesNum,
@@ -395,36 +427,59 @@ export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<Dataset> {
       Comissão: com,
       Outros: out,
       'Lucro Líq.': ll,
+      'Lucro Sc/Tn': lucroScTn || (sacas > 0 ? ll / sacas : 0),
       'Peso Kg': peso,
       'Sacas/Ton': sacas,
       Contrato_Aberto: lb === 0
     };
-  }).filter((x): x is LucroRow => x !== null);
+    return item;
+  }) as (LucroRow | null)[]).filter((x): x is LucroRow => Boolean(x));
 
-  function limparDespBase(rawRows: Record<string, any>[]): DespesaRow[] {
+  function extrairDataOuPeriodo(r: Record<string, any>, colDataName?: string | null): Date | null {
+    if (colDataName && r[colDataName]) {
+      const parsed = parseDateBr(r[colDataName]);
+      if (parsed) return parsed;
+    }
+    // Fallback: verificar se NDocumento contém MM/YYYY ou M/YYYY (ex: "7/2026", "06/2026")
+    const colDoc = findCol(r, ['NDOCUMENTO', 'N DOCUMENTO', 'DOCUMENTO', 'DOC']);
+    if (colDoc && r[colDoc]) {
+      const docStr = String(r[colDoc]).trim();
+      const match = docStr.match(/^(\d{1,2})[\/\-](\d{4})$/);
+      if (match) {
+        const m = parseInt(match[1], 10);
+        const y = parseInt(match[2], 10);
+        if (m >= 1 && m <= 12 && y >= 2020 && y <= 2035) {
+          return new Date(Date.UTC(y, m - 1, 1));
+        }
+      }
+    }
+    return null;
+  }
+
+  function limparDespBase(rawRows: Record<string, any>[], defaultEmpresa: string = 'MM Comercio de Grãos'): DespesaRow[] {
     return rawRows.map(r => {
       const colEmp = findCol(r, ['EMPRESA', 'FILIAL']);
       const empresaRaw = colEmp ? String(r[colEmp] || '').trim() : '';
       if (empresaRaw.toUpperCase() === 'TOTAL') return null;
-      const empresa = MAPA_EMPRESAS[empresaRaw] || empresaRaw;
+      const empresa = empresaRaw ? (MAPA_EMPRESAS[empresaRaw] || empresaRaw) : defaultEmpresa;
 
-      const colData = findCol(r, ['DATAPAGTO', 'DATA PAGTO', 'DATA', 'MÊS', 'MES', 'VENCIMENTO']);
-      const dt = colData ? parseDateBr(r[colData]) : null;
+      const colData = findCol(r, ['DATALANC', 'DATA LANC', 'DATAPAGTO', 'DATA PAGTO', 'DATA', 'MÊS', 'MES', 'VENCIMENTO']);
+      const dt = extrairDataOuPeriodo(r, colData);
       const ano = dt ? dt.getUTCFullYear() : (r['Ano'] ? parseInt(r['Ano'], 10) : 2025);
       const mesNum = dt ? (dt.getUTCMonth() + 1) : 0;
       const mesFiltro = dt ? `${String(mesNum).padStart(2, '0')}/${ano}` : 'Sem Data';
 
-      const colVal = findCol(r, ['VALORPAGOR$', 'VALOR PAGO', 'VALOR', 'R$']);
+      const colVal = findCol(r, ['VLTOTAL', 'VL TOTAL', 'VALORLANC', 'VALOR LANC', 'VALORPAGOR$', 'VALOR PAGO', 'VALOR', 'R$', 'VALORPAGOR']);
       const val = colVal ? parseFloat(r[colVal]) : 0;
       const valor = isNaN(val) ? 0 : val;
       if (Math.abs(valor) <= 0) return null;
 
-      const colCat = findCol(r, ['DESCRICAOPLANOCONTAS', 'PLANO DE CONTAS', 'ITEM', 'DESCRICAO', 'CATEGORIA']);
+      const colCat = findCol(r, ['DESCRICAOPLANOCONTAS', 'PLANO DE CONTAS', 'ITEM', 'DESCRICAO', 'NOMECLIENTEOK', 'CATEGORIA']);
       const item = colCat ? String(r[colCat] || '').trim().toUpperCase() : '';
       if (!item || item.includes('TOTAL') || item.includes('SUBTOTAL')) return null;
 
       const itensFinanceiro = [
-        'IOF', 'IRPJ', 'JUROS EMPRESTIMO', 'JUROS EMPRESTIMOS', 'JUROS S/ MUTUO SOCIO', 'TARIFA BANCARIA'
+        'IOF', 'IRPJ', 'JUROS EMPRESTIMO', 'JUROS EMPRESTIMOS', 'JUROS S/ MUTUO SOCIO', 'TARIFA BANCARIA', 'RESGATE', 'TRANSFERENCIA', 'CAMBIO', 'TARIFA CAMBIO'
       ];
       let catDesp: 'ADMIN' | 'FINANCEIRO' = 'ADMIN';
       for (const ifin of itensFinanceiro) {
@@ -447,8 +502,8 @@ export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<Dataset> {
     }).filter((x): x is DespesaRow => x !== null);
   }
 
-  const df_desp_base = limparDespBase(rawDc);
-  const df_compl_base = limparDespBase(rawCompl);
+  const df_desp_base = limparDespBase(rawDc, 'Bela Cereais Matriz');
+  const df_compl_base = limparDespBase(rawCompl, 'MM Comercio de Grãos');
 
   const df_desp: DespesaRow[] = [];
   for (const d of df_desp_base) {
@@ -459,46 +514,53 @@ export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<Dataset> {
     }
   }
   for (const d of df_compl_base) {
-    if (d.Categoria_Desp === 'FINANCEIRO' && d.Empresa === 'MM Comercio de Grãos') {
+    if (d.Categoria_Desp === 'FINANCEIRO') {
       df_desp.push(d);
     }
   }
 
-  const df_rec_fin: RecFinRow[] = rawR.map(r => {
+  const df_rec_fin: RecFinRow[] = (rawR.map(r => {
     const colEmp = findCol(r, ['EMPRESA', 'FILIAL']);
     const empresaRaw = colEmp ? String(r[colEmp] || '').trim() : '';
     if (empresaRaw.toUpperCase() === 'TOTAL') return null;
-    const empresa = MAPA_EMPRESAS[empresaRaw] || empresaRaw;
+    const empresa = empresaRaw ? (MAPA_EMPRESAS[empresaRaw] || empresaRaw) : 'Bela Cereais Matriz';
 
-    const colData = findCol(r, ['DATAPAGTO', 'DATA PAGTO', 'DATA', 'MÊS', 'MES']);
-    const dt = colData ? parseDateBr(r[colData]) : null;
+    const colData = findCol(r, ['DATALANC', 'DATA LANC', 'DATAPAGTO', 'DATA PAGTO', 'DATA', 'MÊS', 'MES']);
+    const dt = extrairDataOuPeriodo(r, colData);
     const ano = dt ? dt.getUTCFullYear() : 2025;
     const mesNum = dt ? (dt.getUTCMonth() + 1) : 0;
     const mesFiltro = dt ? `${String(mesNum).padStart(2, '0')}/${ano}` : 'Sem Data';
 
-    const colVal = findCol(r, ['VALORPAGOR$', 'VALOR PAGO', 'VALOR', 'R$']);
+    const colVal = findCol(r, ['VLTOTAL', 'VL TOTAL', 'VALORLANC', 'VALOR LANC', 'VALORPAGOR$', 'VALOR PAGO', 'VALOR', 'R$', 'VALORPAGOR']);
     const val = colVal ? parseFloat(r[colVal]) : 0;
     const valor = isNaN(val) ? 0 : val;
     if (Math.abs(valor) <= 0) return null;
 
-    const colCat = findCol(r, ['DESCRICAOPLANOCONTAS', 'PLANO DE CONTAS', 'ITEM', 'DESCRICAO']);
+    const colCat = findCol(r, ['DESCRICAOPLANOCONTAS', 'PLANO DE CONTAS', 'ITEM', 'DESCRICAO', 'NOMECLIENTEOK']);
     const item = colCat ? String(r[colCat] || '').trim().toUpperCase() : '';
     if (!item || item.includes('TOTAL') || item.includes('SUBTOTAL')) return null;
 
-    const termos = ['NDF', 'RENDIMETO', 'RENDIMENTO', 'APLICACAO'];
+    const termos = ['NDF', 'RENDIMETO', 'RENDIMENTO', 'APLICACAO', 'CREDITO'];
     if (!termos.some(t => item.includes(t))) return null;
 
-    return {
+    const res: RecFinRow = {
       Empresa: empresa,
       Ano: ano,
       MesNum: mesNum,
       Mês_Filtro: mesFiltro,
       Item: item,
-      Valor: valor
+      Valor: valor,
+      Descricao: r['Descricao'] ? String(r['Descricao']) : undefined,
+      NomeClienteOk: r['NomeClienteOk'] ? String(r['NomeClienteOk']) : undefined,
+      NDocumento: r['NDocumento'] ? String(r['NDocumento']) : undefined,
+      DescricaoPlanoContas: r['DescricaoPlanoContas'] ? String(r['DescricaoPlanoContas']) : undefined,
+      Parcela: r['Parcela'] ? String(r['Parcela']) : undefined,
+      DescricaoFormaPagto: r['DescricaoFormaPagto'] ? String(r['DescricaoFormaPagto']) : undefined,
     };
-  }).filter((x): x is RecFinRow => x !== null);
+    return res;
+  }) as (RecFinRow | null)[]).filter((x): x is RecFinRow => Boolean(x));
 
-  const df_fat: FaturamentoRow[] = rawF.map(r => {
+  const df_fat: FaturamentoRow[] = (rawF.map(r => {
     const colEmp = findCol(r, ['EMPRESA', 'FILIAL']);
     const empresaRaw = colEmp ? String(r[colEmp] || '').trim() : '';
     if (empresaRaw.toUpperCase() === 'TOTAL') return null;
@@ -510,17 +572,43 @@ export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<Dataset> {
     const mesNum = dt ? (dt.getUTCMonth() + 1) : 0;
     const mesFiltro = dt ? `${String(mesNum).padStart(2, '0')}/${ano}` : 'Sem Data';
 
-    const colVal = findCol(r, ['VALOR VENDA', 'VLMERCADORIA', 'VL MERCADORIA', 'FATURAMENTO']);
-    const val = colVal ? parseFloat(r[colVal]) : 0;
+    const num = (names: string[]) => {
+      const col = findCol(r, names);
+      const v = col ? parseFloat(r[col]) : 0;
+      return isNaN(v) ? 0 : v;
+    };
 
-    return {
+    const valorVenda = num(['VALOR VENDA', 'VLMERCADORIA', 'VL MERCADORIA', 'FATURAMENTO']);
+    const valorCompra = num(['VALOR COMPRA', 'COMPRA']);
+    const frete = num(['FRETE']);
+    const impostos = num(['IMPOSTOS']);
+    const outrosGastos = num(['OUTROS GASTOS', 'OUTROS']);
+    const lucroContrato = num(['LUCRO CONTRATO', 'LUCRO']);
+    const peso = num(['PESO', 'PESO KG']);
+
+    const colCarreg = findCol(r, ['NUM CARREGAMENTO', 'CARREGAMENTO']);
+    const colPlaca = findCol(r, ['PLACA']);
+    const colNF = findCol(r, ['NOTA FISCAL', 'NF']);
+
+    const res: FaturamentoRow = {
       Empresa: empresa,
       Ano: ano,
       MesNum: mesNum,
       Mês_Filtro: mesFiltro,
-      Faturamento: isNaN(val) ? 0 : val
+      Faturamento: valorVenda,
+      'Valor Venda': valorVenda,
+      'Valor Compra': valorCompra,
+      Frete: frete,
+      Impostos: impostos,
+      'Outros Gastos': outrosGastos,
+      'Lucro Contrato': lucroContrato,
+      Peso: peso,
+      'Num Carregamento': colCarreg ? r[colCarreg] : '',
+      Placa: colPlaca ? String(r[colPlaca] || '').trim() : '',
+      'Nota Fiscal': colNF ? r[colNF] : '',
     };
-  }).filter((x): x is FaturamentoRow => x !== null);
+    return res;
+  }) as (FaturamentoRow | null)[]).filter((x): x is FaturamentoRow => Boolean(x));
 
   return {
     df_lucro,
@@ -529,4 +617,11 @@ export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<Dataset> {
     df_fat,
     generatedAt: new Date().toISOString()
   };
+}
+
+export function exportToExcel(data: any[], fileName: string, sheetName: string = 'Dados') {
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, `${fileName}.xlsx`);
 }

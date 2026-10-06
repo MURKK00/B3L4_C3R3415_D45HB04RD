@@ -8,51 +8,64 @@ interface CardKpiProps {
   icone?: React.ReactNode | string;
   alerta?: boolean;
   positivo?: boolean;
+  kicker?: string;
 }
 
 export const CardKpi: React.FC<CardKpiProps> = ({
   titulo,
   valor,
   subtitulo = '',
-  cor = '#F29124',
+  cor = '#E58B20',
   icone = '',
   alerta = false,
   positivo = true,
+  kicker = '',
 }) => {
-  const corBorda = alerta ? (positivo ? '#2ECC71' : '#E74C3C') : cor;
-  const corValor = corBorda;
-  const bgAlerta = alerta
-    ? (!positivo ? 'rgba(231,76,60,0.06)' : 'rgba(46,204,113,0.06)')
-    : '#16181F';
+  const accentColor = alerta ? (positivo ? '#10B981' : '#EF4444') : cor;
 
   return (
-    <div
-      className="rounded-xl border border-[#2A2D38] p-4 transition-all duration-200 hover:border-[#3E4252] shadow-sm relative overflow-hidden"
-      style={{
-        backgroundColor: bgAlerta,
-        borderLeft: `4px solid ${corBorda}`,
-      }}
-    >
-      <div className="flex items-center gap-2 mb-2">
-        {typeof icone === 'string' ? (
-          <span className="text-lg leading-none">{icone}</span>
-        ) : (
-          <span className="text-[#8B8FA8]">{icone}</span>
+    <div className="group relative bg-[#12141C] border border-white/[0.07] hover:border-white/[0.14] rounded-xl p-4 sm:p-5 transition-all duration-200">
+      {/* Top row: Kicker / Label + Icon */}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-start gap-2 min-w-0 flex-1">
+          <span
+            className="w-2 h-2 rounded-full flex-shrink-0 mt-1"
+            style={{ backgroundColor: accentColor }}
+          />
+          <span
+            className="text-xs font-bold uppercase tracking-normal text-[#9DA3B4] font-heading leading-snug line-clamp-2 min-h-[28px] flex items-center"
+            title={titulo}
+          >
+            {titulo}
+          </span>
+        </div>
+        {icone && (
+          <div className="text-base opacity-80 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-1 mt-0.5">
+            {icone}
+          </div>
         )}
-        <span className="text-[11px] font-semibold text-[#8B8FA8] uppercase tracking-wider font-heading">
-          {titulo}
-        </span>
       </div>
+
+      {/* Main Metric Value */}
       <div
-        className="text-xl md:text-2xl font-bold font-heading truncate"
-        style={{ color: corValor }}
+        className="text-2xl sm:text-3xl font-extrabold font-mono tracking-tight text-white tabular-nums truncate"
         title={valor}
       >
         {valor}
       </div>
-      {subtitulo && (
-        <div className="text-xs text-[#8B8FA8] mt-1.5 font-medium flex items-center gap-1">
-          {subtitulo}
+
+      {/* Subtitle / Kicker */}
+      {(subtitulo || kicker) && (
+        <div className="mt-2.5 text-xs sm:text-[13px] text-[#9DA3B4] flex items-center justify-between gap-2 font-medium">
+          <span className="truncate">{subtitulo}</span>
+          {kicker && (
+            <span
+              className="text-xs font-mono font-bold flex-shrink-0"
+              style={{ color: accentColor }}
+            >
+              {kicker}
+            </span>
+          )}
         </div>
       )}
     </div>

@@ -47,7 +47,6 @@ export const GraficosTab: React.FC<GraficosTabProps> = ({ df_lf, df_df }) => {
       lucroOp: d.lucroBruto - d.frete - d.impostos - d.comissao,
     }))
     .sort((a, b) => {
-      // sort by MM/YYYY
       const [m1, y1] = a.mes.split('/').map(Number);
       const [m2, y2] = b.mes.split('/').map(Number);
       return (y1 * 12 + m1) - (y2 * 12 + m2);
@@ -56,13 +55,13 @@ export const GraficosTab: React.FC<GraficosTabProps> = ({ df_lf, df_df }) => {
   // 2. Cascata da DRE (Waterfall)
   const k = calcularKpis(df_lf, df_df);
   const waterfallSteps = [
-    { label: 'Lucro Bruto', val: k.receita_bruta, type: 'total', color: '#F29124' },
-    { label: '(-) Fretes', val: -k.frete, type: 'diff', color: '#E74C3C' },
-    { label: '(-) Impostos', val: -k.impostos_venda, type: 'diff', color: '#E74C3C' },
-    { label: '(-) Comissões', val: -k.comissao, type: 'diff', color: '#E74C3C' },
+    { label: 'Lucro Bruto', val: k.receita_bruta, type: 'total', color: '#E58B20' },
+    { label: '(-) Fretes', val: -k.frete, type: 'diff', color: '#EF4444' },
+    { label: '(-) Impostos', val: -k.impostos_venda, type: 'diff', color: '#EF4444' },
+    { label: '(-) Comissões', val: -k.comissao, type: 'diff', color: '#EF4444' },
     { label: 'Luc. Operacional', val: k.lucro_operacional, type: 'total', color: '#3B82F6' },
-    { label: '(-) Desp. Admin.', val: -k.despesas_admin, type: 'diff', color: '#E74C3C' },
-    { label: 'Luc. Líquido Final', val: k.lucro_liquido_final, type: 'total', color: k.lucro_liquido_final >= 0 ? '#2ECC71' : '#E74C3C' },
+    { label: '(-) Desp. Admin.', val: -k.despesas_admin, type: 'diff', color: '#EF4444' },
+    { label: 'Luc. Líquido Final', val: k.lucro_liquido_final, type: 'total', color: k.lucro_liquido_final >= 0 ? '#10B981' : '#EF4444' },
   ];
 
   // 3. Top 10 Despesas
@@ -119,47 +118,43 @@ export const GraficosTab: React.FC<GraficosTabProps> = ({ df_lf, df_df }) => {
     });
 
   const maxDespMes = Math.max(...despMensais.map(d => d.valor), 1);
-
-  // Maximum value for monthly chart
   const maxMensalVal = Math.max(
     ...dadosMensais.map(d => Math.max(d.lucroBruto, Math.abs(d.lucroOp), Math.abs(d.lucroLiq))),
     1000
   );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* 1. Evolução Financeira Mensal */}
-      <div className="bg-[#16181F] border border-[#2A2D38] rounded-2xl p-6">
+      <div className="bg-[#12141C] border border-white/[0.07] rounded-xl p-5 space-y-4">
         <SectionHeader
           titulo="Evolução Financeira Mensal"
-          subtitulo="Receita bruta, resultado operacional e lucro líquido por período"
+          subtitulo="Comparação entre lucro bruto, resultado operacional e lucro líquido"
         />
 
         {dadosMensais.length === 0 ? (
-          <div className="py-12 text-center text-[#8B8FA8] text-sm">
+          <div className="py-12 text-center text-[#8E93A6] text-xs">
             Dados mensais insuficientes para o período selecionado.
           </div>
         ) : (
           <div>
-            <div className="flex flex-wrap items-center gap-4 text-xs font-semibold mb-4 text-[#8B8FA8]">
+            <div className="flex flex-wrap items-center gap-4 text-xs font-semibold mb-3 text-[#8E93A6]">
               <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-[#F29124]" />
+                <span className="w-2.5 h-2.5 rounded bg-[#E58B20]" />
                 <span>Lucro Bruto</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-3 h-1 bg-[#3B82F6]" />
+                <span className="w-2.5 h-2.5 rounded bg-[#3B82F6]" />
                 <span>Lucro Operacional</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-3 h-1 bg-[#2ECC71]" />
+                <span className="w-2.5 h-2.5 rounded bg-[#10B981]" />
                 <span>Lucro Líquido</span>
               </div>
             </div>
 
-            {/* Custom Bar & Trend SVG Chart */}
             <div className="h-64 sm:h-72 w-full relative">
               <svg className="w-full h-full overflow-visible" viewBox="0 0 800 240" preserveAspectRatio="none">
-                {/* Horizontal grid lines */}
                 {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => (
                   <line
                     key={i}
@@ -167,19 +162,18 @@ export const GraficosTab: React.FC<GraficosTabProps> = ({ df_lf, df_df }) => {
                     y1={200 - pct * 180}
                     x2="780"
                     y2={200 - pct * 180}
-                    stroke="#2A2D38"
+                    stroke="rgba(255,255,255,0.06)"
                     strokeDasharray="4 4"
                   />
                 ))}
 
-                {/* Zero line */}
-                <line x1="40" y1="200" x2="780" y2="200" stroke="#3E4252" strokeWidth="1.5" />
+                <line x1="40" y1="200" x2="780" y2="200" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
 
                 {/* Bars for Lucro Bruto */}
                 {dadosMensais.map((d, i) => {
                   const step = 740 / dadosMensais.length;
                   const x = 50 + i * step;
-                  const barW = Math.max(12, Math.min(36, step * 0.5));
+                  const barW = Math.max(12, Math.min(32, step * 0.45));
                   const h = Math.max(2, (d.lucroBruto / maxMensalVal) * 180);
                   const y = 200 - h;
 
@@ -190,16 +184,15 @@ export const GraficosTab: React.FC<GraficosTabProps> = ({ df_lf, df_df }) => {
                         y={y}
                         width={barW}
                         height={h}
-                        rx="4"
-                        fill="#F29124"
+                        rx="3"
+                        fill="#E58B20"
                         opacity="0.85"
                         className="transition-opacity group-hover:opacity-100"
                       />
-                      {/* Label under */}
                       <text
                         x={x + barW / 2}
-                        y="220"
-                        fill="#8B8FA8"
+                        y="218"
+                        fill="#8E93A6"
                         fontSize="10"
                         textAnchor="middle"
                         fontFamily="Montserrat"
@@ -216,7 +209,7 @@ export const GraficosTab: React.FC<GraficosTabProps> = ({ df_lf, df_df }) => {
                   d={dadosMensais
                     .map((d, i) => {
                       const step = 740 / dadosMensais.length;
-                      const x = 50 + i * step + Math.max(6, Math.min(18, step * 0.25));
+                      const x = 50 + i * step + Math.max(6, Math.min(16, step * 0.22));
                       const y = 200 - (Math.max(0, d.lucroOp) / maxMensalVal) * 180;
                       return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
                     })
@@ -231,30 +224,16 @@ export const GraficosTab: React.FC<GraficosTabProps> = ({ df_lf, df_df }) => {
                   d={dadosMensais
                     .map((d, i) => {
                       const step = 740 / dadosMensais.length;
-                      const x = 50 + i * step + Math.max(6, Math.min(18, step * 0.25));
+                      const x = 50 + i * step + Math.max(6, Math.min(16, step * 0.22));
                       const y = 200 - (Math.max(0, d.lucroLiq) / maxMensalVal) * 180;
                       return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
                     })
                     .join(' ')}
                   fill="none"
-                  stroke="#2ECC71"
-                  strokeWidth="2.5"
+                  stroke="#10B981"
+                  strokeWidth="2"
                   strokeDasharray="4 4"
                 />
-
-                {/* Dots */}
-                {dadosMensais.map((d, i) => {
-                  const step = 740 / dadosMensais.length;
-                  const x = 50 + i * step + Math.max(6, Math.min(18, step * 0.25));
-                  const yOp = 200 - (Math.max(0, d.lucroOp) / maxMensalVal) * 180;
-                  const yLiq = 200 - (Math.max(0, d.lucroLiq) / maxMensalVal) * 180;
-                  return (
-                    <g key={i}>
-                      <circle cx={x} cy={yOp} r="3.5" fill="#3B82F6" stroke="#16181F" strokeWidth="1" />
-                      <circle cx={x} cy={yLiq} r="3.5" fill="#2ECC71" stroke="#16181F" strokeWidth="1" />
-                    </g>
-                  );
-                })}
               </svg>
             </div>
           </div>
@@ -262,31 +241,31 @@ export const GraficosTab: React.FC<GraficosTabProps> = ({ df_lf, df_df }) => {
       </div>
 
       {/* 2. Cascata da DRE (Waterfall) */}
-      <div className="bg-[#16181F] border border-[#2A2D38] rounded-2xl p-6">
+      <div className="bg-[#12141C] border border-white/[0.07] rounded-xl p-5 space-y-4">
         <SectionHeader
-          titulo="Cascata da DRE (Waterfall)"
-          subtitulo="Decomposição visual do resultado — do lucro bruto ao lucro líquido final"
+          titulo="Cascata Contábil da DRE"
+          subtitulo="Decomposição passo a passo da formação do resultado líquido final"
         />
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5 pt-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
           {waterfallSteps.map((step, idx) => (
             <div
               key={idx}
-              className="bg-[#1E2029] border border-[#2A2D38] rounded-xl p-3 flex flex-col justify-between"
+              className="bg-[#161822] border border-white/[0.06] rounded-xl p-3 flex flex-col justify-between"
             >
-              <div className="text-[11px] font-semibold text-[#8B8FA8] uppercase tracking-wider truncate mb-2">
+              <div className="text-[10px] font-semibold text-[#8E93A6] uppercase tracking-wider truncate mb-2">
                 {step.label}
               </div>
               <div
-                className="text-sm font-bold font-mono truncate"
+                className="text-sm font-bold font-mono truncate tabular-nums"
                 style={{ color: step.color }}
                 title={br(step.val)}
               >
                 {brMil(step.val)}
               </div>
-              <div className="mt-2.5 w-full bg-[#16181F] rounded-md h-2 overflow-hidden">
+              <div className="mt-2.5 w-full bg-white/[0.05] rounded-full h-1.5 overflow-hidden">
                 <div
-                  className="h-full rounded-md"
+                  className="h-full rounded-full"
                   style={{
                     backgroundColor: step.color,
                     width: `${Math.min(100, Math.max(10, (Math.abs(step.val) / (k.receita_bruta || 1)) * 100))}%`,
@@ -301,15 +280,15 @@ export const GraficosTab: React.FC<GraficosTabProps> = ({ df_lf, df_df }) => {
       {/* 3 & 4. Top 10 Despesas e Lucro por Produto */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top 10 Despesas */}
-        <div className="bg-[#16181F] border border-[#2A2D38] rounded-2xl p-6">
+        <div className="bg-[#12141C] border border-white/[0.07] rounded-xl p-5 space-y-3">
           <SectionHeader
             titulo="Top 10 Despesas Administrativas"
             subtitulo="Maiores contas do período consolidado"
           />
-          <div className="space-y-3 pt-2">
+          <div className="space-y-2.5 pt-1">
             {top10Despesas.map((d, i) => {
               const cat = categorizarDespesa(d.item);
-              const cor = CORES_CAT[cat] || '#F29124';
+              const cor = CORES_CAT[cat] || '#E58B20';
               const pct = (d.valor / maxDespVal) * 100;
               return (
                 <div key={i} className="space-y-1">
@@ -317,9 +296,9 @@ export const GraficosTab: React.FC<GraficosTabProps> = ({ df_lf, df_df }) => {
                     <span className="font-semibold text-white truncate max-w-[220px]" title={d.item}>
                       {d.item}
                     </span>
-                    <span className="font-mono text-[#E74C3C] font-medium">{br(d.valor)}</span>
+                    <span className="font-mono text-[#EF4444] font-medium">{br(d.valor)}</span>
                   </div>
-                  <div className="w-full bg-[#1E2029] rounded-full h-2 overflow-hidden">
+                  <div className="w-full bg-[#161822] rounded-full h-1.5 overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all"
                       style={{ width: `${pct}%`, backgroundColor: cor }}
@@ -332,23 +311,23 @@ export const GraficosTab: React.FC<GraficosTabProps> = ({ df_lf, df_df }) => {
         </div>
 
         {/* Lucro Líquido por Produto */}
-        <div className="bg-[#16181F] border border-[#2A2D38] rounded-2xl p-6">
+        <div className="bg-[#12141C] border border-white/[0.07] rounded-xl p-5 space-y-3">
           <SectionHeader
             titulo="Lucro Líquido por Commodity"
             subtitulo="Rentabilidade líquida gerada por cultura agrícola"
           />
-          <div className="space-y-3 pt-2">
+          <div className="space-y-3 pt-1">
             {prodLiq.map((p, i) => {
               const pct = (p.valor / maxProdVal) * 100;
               return (
                 <div key={i} className="space-y-1">
                   <div className="flex justify-between items-center text-xs">
                     <span className="font-semibold text-white">{p.produto}</span>
-                    <span className="font-mono text-[#2ECC71] font-bold">{br(p.valor)}</span>
+                    <span className="font-mono text-[#10B981] font-bold">{br(p.valor)}</span>
                   </div>
-                  <div className="w-full bg-[#1E2029] rounded-full h-2.5 overflow-hidden">
+                  <div className="w-full bg-[#161822] rounded-full h-2 overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-[#F29124] to-[#2ECC71] transition-all"
+                      className="h-full rounded-full bg-gradient-to-r from-[#E58B20] to-[#10B981] transition-all"
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -360,31 +339,27 @@ export const GraficosTab: React.FC<GraficosTabProps> = ({ df_lf, df_df }) => {
       </div>
 
       {/* 5. Eficiência por Contrato (Volume vs Lucro) */}
-      <div className="bg-[#16181F] border border-[#2A2D38] rounded-2xl p-6">
+      <div className="bg-[#12141C] border border-white/[0.07] rounded-xl p-5 space-y-3">
         <SectionHeader
-          titulo="Eficiência por Contrato"
-          subtitulo="Volume negociado (Kg) × Lucro Líquido gerado por contrato"
+          titulo="Dispersão de Contratos (Volume × Lucro Líquido)"
+          subtitulo="Passe o cursor sobre os pontos para visualizar o contrato, cliente e valores"
         />
 
-        <div className="relative h-64 sm:h-80 w-full bg-[#12141A] rounded-xl border border-[#2A2D38] p-4 overflow-hidden">
+        <div className="relative h-64 sm:h-72 w-full bg-[#090A0F] rounded-xl border border-white/[0.06] p-4 overflow-hidden">
           <svg className="w-full h-full" viewBox="0 0 800 280">
-            {/* Grid & Zero line */}
-            <line x1="60" y1="20" x2="60" y2="250" stroke="#2A2D38" />
-            <line x1="60" y1="250" x2="780" y2="250" stroke="#2A2D38" />
-            <line x1="60" y1="180" x2="780" y2="180" stroke="#E74C3C" strokeDasharray="4 4" strokeWidth="1" />
+            <line x1="60" y1="20" x2="60" y2="250" stroke="rgba(255,255,255,0.08)" />
+            <line x1="60" y1="250" x2="780" y2="250" stroke="rgba(255,255,255,0.08)" />
+            <line x1="60" y1="180" x2="780" y2="180" stroke="#EF4444" strokeDasharray="4 4" strokeWidth="1" />
 
-            {/* Zero label */}
-            <text x="50" y="184" fill="#E74C3C" fontSize="10" textAnchor="end" fontFamily="Montserrat">
+            <text x="50" y="184" fill="#EF4444" fontSize="10" textAnchor="end" fontFamily="Montserrat">
               R$ 0
             </text>
 
-            {/* Scatter points */}
             {scatterPoints.slice(0, 150).map((pt, i) => {
               const cx = 70 + (pt.peso / maxPeso) * 690;
-              // Map liq to Y: minLiq -> 240, 0 -> 180, maxLiq -> 30
               const normLiq = (pt.lucroLiq - minLiq) / ((maxLiq - minLiq) || 1);
               const cy = 240 - normLiq * 210;
-              const cor = pt.lucroLiq >= 0 ? '#2ECC71' : '#E74C3C';
+              const cor = pt.lucroLiq >= 0 ? '#10B981' : '#EF4444';
 
               return (
                 <circle
@@ -402,86 +377,22 @@ export const GraficosTab: React.FC<GraficosTabProps> = ({ df_lf, df_df }) => {
             })}
           </svg>
 
-          {/* Hover tooltip */}
           {hoveredScatter && (
-            <div className="absolute top-4 right-4 bg-[#1E2029] border border-[#2A2D38] rounded-xl p-3 text-xs shadow-xl z-10 pointer-events-none">
+            <div className="absolute top-4 right-4 bg-[#161822] border border-white/[0.1] rounded-xl p-3 text-xs shadow-xl z-10 pointer-events-none">
               <div className="font-bold text-white mb-1">{hoveredScatter.produto}</div>
-              <div className="text-[#8B8FA8]">Cliente: <span className="text-[#C8CAD4]">{hoveredScatter.cliente || 'N/A'}</span></div>
-              <div className="text-[#8B8FA8]">Peso: <span className="text-[#F29124] font-mono">{numFmt(hoveredScatter.peso)} kg</span></div>
-              <div className="text-[#8B8FA8]">
+              <div className="text-[#8E93A6]">Cliente: <span className="text-white">{hoveredScatter.cliente || 'N/A'}</span></div>
+              <div className="text-[#8E93A6]">Peso: <span className="text-[#E58B20] font-mono">{numFmt(hoveredScatter.peso)} kg</span></div>
+              <div className="text-[#8E93A6]">
                 Lucro Líq.:{' '}
                 <span
                   className="font-mono font-bold"
-                  style={{ color: hoveredScatter.lucroLiq >= 0 ? '#2ECC71' : '#E74C3C' }}
+                  style={{ color: hoveredScatter.lucroLiq >= 0 ? '#10B981' : '#EF4444' }}
                 >
                   {br(hoveredScatter.lucroLiq)}
                 </span>
               </div>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* 6. Evolução das Despesas Administrativas */}
-      <div className="bg-[#16181F] border border-[#2A2D38] rounded-2xl p-6">
-        <SectionHeader
-          titulo="Evolução das Despesas Administrativas"
-          subtitulo="Total mensal de custos fixos e administrativos"
-        />
-
-        <div className="h-56 w-full relative">
-          <svg className="w-full h-full overflow-visible" viewBox="0 0 800 200" preserveAspectRatio="none">
-            {/* Area path */}
-            <path
-              d={`
-                M 50 170
-                ${despMensais.map((d, i) => {
-                  const step = 730 / despMensais.length;
-                  const x = 50 + i * step + step * 0.5;
-                  const y = 170 - (d.valor / maxDespMes) * 140;
-                  return `L ${x} ${y}`;
-                }).join(' ')}
-                L 780 170 Z
-              `}
-              fill="rgba(242, 145, 36, 0.08)"
-            />
-
-            {/* Line path */}
-            <path
-              d={despMensais.map((d, i) => {
-                const step = 730 / despMensais.length;
-                const x = 50 + i * step + step * 0.5;
-                const y = 170 - (d.valor / maxDespMes) * 140;
-                return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-              }).join(' ')}
-              fill="none"
-              stroke="#F29124"
-              strokeWidth="2.5"
-            />
-
-            {/* Dots & Labels */}
-            {despMensais.map((d, i) => {
-              const step = 730 / despMensais.length;
-              const x = 50 + i * step + step * 0.5;
-              const y = 170 - (d.valor / maxDespMes) * 140;
-              return (
-                <g key={i} className="group cursor-pointer">
-                  <circle cx={x} cy={y} r="4" fill="#F29124" stroke="#16181F" strokeWidth="1.5" />
-                  <text
-                    x={x}
-                    y="190"
-                    fill="#8B8FA8"
-                    fontSize="10"
-                    textAnchor="middle"
-                    fontFamily="Montserrat"
-                  >
-                    {d.mes}
-                  </text>
-                  <title>{`${d.mes}: ${br(d.valor)}`}</title>
-                </g>
-              );
-            })}
-          </svg>
         </div>
       </div>
     </div>
