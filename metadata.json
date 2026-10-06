@@ -1,0 +1,8 @@
+{
+  "name": "Bela Cereais - Dashboard",
+  "description": "Dashboard executivo e financeiro para comercialização de grãos do Grupo Bela Cereais com DRE, análise de contratos, despesas, gráficos interativos e comparativo anual.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'DM Sans', 'Montserrat', sans-serif;
+    background-color: #0F1117;
+    color: #C8CAD4;
+  }
+
+  h1, h2, h3, h4, .font-heading {
+    font-family: 'Montserrat', 'Syne', sans-serif;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0F1117;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #2A2D38;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #F29124;
+  }
+}
